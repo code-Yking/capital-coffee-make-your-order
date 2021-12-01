@@ -1,6 +1,3 @@
-READ ME
----------------------------
----------------------------
 Please read this document and follow all the steps to get a completely functioning program
 
 1. Installing the necessary modules:
