@@ -10,7 +10,3 @@ Please read this document and follow all the steps to get a completely functioni
 2. Running main.py
 	It has to be run in admin mode to completely function. 
 	Try running the run.bat file.
-
----------------------------
-
-This programe has been tested in MacOS 10.15.7 and Windows 10
