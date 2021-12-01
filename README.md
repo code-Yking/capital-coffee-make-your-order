@@ -2,9 +2,10 @@ Please read this document and follow all the steps to get a completely functioni
 
 1. Installing the necessary modules:
 	Install pip : https://www.liquidweb.com/kb/install-pip-windows/
+	
 	Open cmd.exe with Admin Privileges and run: 
-		pip install wxPython
-		pip install reportlab
+		`pip install wxPython`
+		`pip install reportlab`
 	
 2. Running main.py
 	It has to be run in admin mode to completely function. 
