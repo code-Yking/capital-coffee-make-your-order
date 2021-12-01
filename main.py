@@ -4,7 +4,6 @@ Author: Samuel Kurian
 
 @WARNING: 
 This program might need admin privileges to perform some of its functions.
-This project is part of a NCEA Level 3 Digital Technologies Assessment.
 
 Final Version:
 Version no. : 1.6.3
