@@ -1,0 +1,844 @@
+Index: main.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- main.py	(date 1601379337013)
++++ main.py	(date 1601379337013)
+@@ -1,11 +1,30 @@
++##########################################
++# Project: Coffee Order                  #
++# Author: Samuel Kurian                  #
++##########################################
++
++# HOW THIS CODE IS STRUCTURED:
++#   imports
++#   constants:   PRICES, LIMITS, SIZE
++#   external functions:  coffee_names(),  print_pdf()
++#   wx.Panel classes and their  methods: PickOrDelivery(),
++#   main() function
++
+ import wx
+ import wx.lib.scrolledpanel as scrolled
+ 
++import ast
++from reportlab.pdfgen.canvas import Canvas
+ 
++import subprocess
++import re
++import datetime
++
++# todo add more coffeees and set the prices
+ '''''CONSTANTS'''''
+ PRICES = {
+     'coffees': {
+-        '️cappuccino': 4,
++        'cappuccino': 4,
+         'mochaccino': 4,
+         'flat white': 5,
+         'café late': 3,
+@@ -15,24 +34,19 @@
+         'hot chocolate': 3,
+         'chai latte': 4
+     },
+-    'additives': {
+-        'sugar': 1,
+-        'marshmallows': 2
+-    },
+     'delivery': 3
+ }
+ 
+-LIMITS = {
+-    'coffee': 5,
+-    'sugar': 6,
+-    'marshmallows': 4
+-}
++ADDITIVES = ['Sugar', 'Marshmallows', 'Ice', 'Cinnamon Dusting', 'Chocolate Dusting']
++
++QUANTIZE_ADDITIVES = ['Sugar']
+ 
+ SIZE = ['Large', 'Medium', 'Small']
+ 
+-no_coffee = 0
++DEFAULT_SIZE = (655, 483)  # default size of the window.
+ 
+ 
++# This function is for generating a list of coffees from the dictionary PRICES
+ def coffee_names():
+     coffee_list = []
+     for key in PRICES['coffees']:
+@@ -41,55 +55,131 @@
+     return coffee_list
+ 
+ 
+-def additive_names():
+-    additive_list = []
+-    for key in PRICES['additives']:
+-        additive_list.append(key.title())
++# Print the receipt using the reportlab module
++def print_pdf(order_list):  # todo print comprehension using dictionary
++    time = str(datetime.datetime.now()).replace(' ','_')
++    max_h = 0
++    for n in order_list:
++        if len(n) > max_h:
++            max_h = len(n)
++    print(max_h)
++
++    print(len(order_list))
++    width: int = (max_h + 3) * 6
++    length: int = (len(order_list) + 2) * 14
++
++    canvas = Canvas(time + ".pdf", pagesize=(width, length))  # todo make a directory if not present
++    print()
++
++    i = 1
++    canvas.drawString(12 * 3, length - 12 * i, order_list[0])
++    i += 1
++    no = 1
++    for n in order_list[1:-5]:
++        if n in ADDITIVES or 'Sugar' in n:
++            canvas.drawString(12 * 2, length - 13 * i, n)
++        else:
++            canvas.drawString(1, length - 13 * i, "{}. {}".format(no, n))
++            no += 1
++        i += 1
++
++    i += 1
++    for n in order_list[-5:]:
++        canvas.drawString(12 * 1, length - 14 * i, n)
++        i += 1
++
++    canvas.save()
++
++    subprocess.run(['open', time + '.pdf'], check=True)  # open the pdf
++
+ 
+-    return additive_list
++# to fit the panel size when an element is added, removed or updated.
++def fit(cont):
++    try:
++        cont.SetSize((1, 1))
++        cont.Fit()
++    except:
++        pass
++    cont_p = cont.parent
+ 
++    # print(cont, 'fit', cont.GetSize())
++    while True:
++        try:
++            cont_p.SetSize((1, 1))
++            cont_p.Fit()
++            # print(cont_p, 'fit', cont_p.GetSize())
++            cont_p = cont_p.parent
++        except:
++            cont_p.SetSize(DEFAULT_SIZE)
++            break
+ 
++
++# The Radio Buttons Panel this is part of the Choice() and MainPanel()
+ class PickOrDelivery(wx.Panel):
+     def __init__(self, parent):
+         super().__init__(parent)
+-        pick_sizer = wx.BoxSizer(wx.VERTICAL)
+-        s_box = wx.StaticBox(self, 0, 'Choose an option')
++        self.parent = parent
++        """
++        Constructor
++        """
++        # pick_sizer = wx.BoxSizer(wx.VERTICAL)
++        s_box = wx.StaticBox(self, 0, 'Choose a serving option')
+         s_box_sizer = wx.StaticBoxSizer(s_box, wx.VERTICAL)
+ 
+         pick_sizer = wx.BoxSizer(wx.HORIZONTAL)
+         pick_up_radio = wx.RadioButton(self, label="Pick up", style=wx.RB_GROUP)
++        pick_up_radio.Bind(wx.EVT_RADIOBUTTON, lambda evt, serve=0: self.radio_select(evt, serve=serve))
+         delivery_radio = wx.RadioButton(self, label="Delivery")
++        delivery_radio.Bind(wx.EVT_RADIOBUTTON, lambda evt, serve=1: self.radio_select(evt, serve=serve))
+         pick_sizer.Add(pick_up_radio, 0, wx.ALIGN_CENTER, 5)
+         pick_sizer.Add(delivery_radio, 0, wx.ALIGN_CENTER, 5)
+ 
+         s_box_sizer.Add(pick_sizer, 0, wx.ALIGN_CENTRE, 5)
+         self.SetSizer(s_box_sizer)
+ 
++    def radio_select(self, event, serve):
++        self.parent.parent.summary_panel.serving = serve
++        print(self.parent.parent.summary_panel.serving)
++        self.parent.enable(serve)
++        self.parent.parent.summary_refresh(0)
++        fit(self)
+ 
++
++# todo make changes to selected/available_additives lists through a(n external) function
+ class Additives(wx.Panel):
+     def __init__(self, parent, no=1):
+         super().__init__(parent)
+         self.parent = parent
+ 
+         self.additives_sizer = wx.BoxSizer(wx.HORIZONTAL)
+-        self.combo_bx = wx.ComboBox(self, choices=['Choose additives...'] + self.parent.available_additives)
+-        self.combo_bx.Bind(wx.EVT_COMBOBOX, self.combo_select_option)
+-        # static_txt = wx.StaticText(self, label='Amount:')
+-        text_ctrl = wx.TextCtrl(self, value='')
++        self.addit_combo = wx.ComboBox(self, choices=['Choose additives...'] + self.parent.available_additives,
++                                       style=wx.CB_READONLY)
++        self.addit_combo.Bind(wx.EVT_COMBOBOX, self.combo_select_option)
++
++        self.num_ctrl = wx.SpinCtrl(self, max=5)
++        self.num_ctrl.Bind(wx.EVT_SPINCTRL, lambda num=0: self.parent.parent.parent.parent.summary_refresh(num))
++        self.num_ctrl.Disable()
+         remove_btn = wx.Button(self, label='X', size=(40, -1))
+         remove_btn.Bind(wx.EVT_BUTTON, self.remove)
+ 
+-        self.additives_sizer.Add(self.combo_bx, 0, wx.ALL, 5)
+-        # additives_sizer.Add(static_txt, 0, wx.ALL, 5)
+-        self.additives_sizer.Add(text_ctrl, 0, wx.ALL, 5)
++        self.additives_sizer.Add(self.addit_combo, 0, wx.ALL, 5)
++
++        self.additives_sizer.Add(self.num_ctrl, 0, wx.ALL, 5)
+         self.additives_sizer.Add(remove_btn, 0, wx.ALL, 5)
+ 
+         self.SetSizer(self.additives_sizer)
+ 
+     def remove(self, event):
++        self.parent.additives_added = self.parent.additives_added - 1
++        self.parent.del_combo(self)
++
+         self.Destroy()
+-        self.parent.Fit()
+-        self.parent.parent.fit()
++        fit(self)
++
++        # fix up the selected and available additives
++        self.parent.selected_additives = list(self.parent.selected_additive())
++        self.parent.available_additives = list(set(list(ADDITIVES)) - set(self.parent.selected_additives))
++        self.parent.stop_additives()
+ 
+     def combo_select_option(self, event):
+         combo_box = event.GetEventObject()
+@@ -97,9 +187,19 @@
+             combo_box.Delete(0)
+             self.parent.default_delete.append(combo_box)
+ 
+-        self.parent.available_additives.remove(combo_box.GetValue())
+-        self.parent.adjust_additives(self, 0)
+-        # self.parent.parent.parent.summary_refresh(0)
++        self.parent.selected_additives = list(self.parent.selected_additive())
++        self.parent.available_additives = list(set(list(ADDITIVES)) - set(self.parent.selected_additives))
++
++        self.parent.update_combo(self)
++        self.parent.stop_additives()
++
++        if combo_box.GetValue() in QUANTIZE_ADDITIVES:
++            self.num_ctrl.Enable()
++            self.num_ctrl.SetValue(1)
++        else:
++            self.num_ctrl.SetValue(0)
++            self.num_ctrl.Disable()
++        self.parent.parent.parent.parent.summary_refresh(0)
+ 
+ 
+ class Coffees(wx.Panel):
+@@ -107,15 +207,18 @@
+         super().__init__(parent)
+         self.parent = parent
+ 
+-        self.available_additives = list(additive_names())
+-
++        # Defining some variables
++        self.available_additives = list(ADDITIVES)
++        self.selected_additives = []
++        self.additives_added = 0
+         self.default_delete = []
+ 
+-        s_box = wx.StaticBox(self, 0, 'Coffees No {}'.format(no))
+-        s_box_sizer = wx.StaticBoxSizer(s_box, wx.VERTICAL)
++        """Constructor"""
++        self.s_box = wx.StaticBox(self, 0, 'Coffees No {}'.format(no))
++        s_box_sizer = wx.StaticBoxSizer(self.s_box, wx.VERTICAL)
+ 
+         coffee_sizer = wx.BoxSizer(wx.HORIZONTAL)
+-        self.size_combo = wx.ComboBox(self, choices=['Sizes...']+SIZE, style=wx.CB_READONLY)
++        self.size_combo = wx.ComboBox(self, choices=['Sizes...'] + SIZE, style=wx.CB_READONLY)
+         self.size_combo.Bind(wx.EVT_COMBOBOX, self.remove_default_option)
+         self.coffee_combo = wx.ComboBox(self, choices=['Choose a coffee...'] + coffee_names(), style=wx.CB_READONLY)
+         self.coffee_combo.Bind(wx.EVT_COMBOBOX, self.remove_default_option)
+@@ -127,8 +230,6 @@
+ 
+         self.add_additives_btn = wx.Button(self, label='Add Additives')
+         self.add_additives_btn.Bind(wx.EVT_BUTTON, self.add_additives)
+-        # additives_sizer.Add(self.additives_container, 0, wx.ALL, 5)
+-        # additives_sizer.Add(self.add_additives_btn, 0, wx.EXPAND, 5)
+ 
+         coffee_sizer.Add(self.size_combo, 0, wx.EXPAND, 5)
+         coffee_sizer.Add(self.coffee_combo, 0, wx.EXPAND, 5)
+@@ -141,11 +242,12 @@
+ 
+     def remove(self, event):
+         self.Destroy()
+-        # self.parent.fit()
+-        self.parent.parent.SetSize((1, 1))
+-        self.parent.parent.fit()
+-        self.parent.no_coffees = self.parent.no_coffees-1
++        # fit(self)
++        self.parent.no_coffees = self.parent.no_coffees - 1
+         self.parent.parent.parent.summary_refresh(0)
++        self.parent.refresh_no()
++        self.parent.add_default()
++        fit(self)
+ 
+     def remove_default_option(self, event):
+         combo_box = event.GetEventObject()
+@@ -154,140 +256,414 @@
+             self.default_delete.append(combo_box)
+ 
+         self.parent.parent.parent.summary_refresh(0)
++        fit(self)
+ 
+     def add_additives(self, event):
+         additives_panel = Additives(self)
+         self.additives_container.Add(additives_panel, 0, wx.EXPAND, 5)
+-        self.parent.fit()
++        fit(self)
++        self.additives_added = self.additives_added + 1
++        self.stop_additives()
+ 
+-    # def remove_additives(self, event, sz):
+-    #     sz.Destroy()
+-    def adjust_additives(self, me, action):
++    def update_combo(self, me):
+         for n in self.additives_container.GetChildren():
+             additive_instance = n.GetWindow()
+-            to_remove = me.combo_bx.GetValue()
+-            print(to_remove)
+-        if action == 0:
++            to_remove = me.addit_combo.GetValue()
++
+             if additive_instance != me:
+-                print(additive_instance.combo_bx.GetValue())
+-                remove_index = additive_instance.combo_bx.FindString(to_remove)
+-                additive_instance.combo_bx.Delete(remove_index)
+-        pass
++                remove_index = additive_instance.addit_combo.FindString(to_remove)
++                additive_instance.addit_combo.Delete(remove_index)
++
++                for i in self.available_additives:
++                    if additive_instance.addit_combo.FindString(i) < 0 and n not in self.selected_additives:
++                        print(additive_instance.addit_combo.FindString(i))
++                        additive_instance.addit_combo.Append(i)
+ 
++    def del_combo(self, me):
++        for n in self.additives_container.GetChildren():
++            additive_instance = n.GetWindow()
++            to_add = me.addit_combo.GetValue()
++            # add_index = me.addit_combo.FindString(to_add)
+ 
++            if additive_instance != me and to_add in ADDITIVES:
++                # remove_index = additive_instance.addit_combo.FindString(to_add)
++                additive_instance.addit_combo.Append(to_add)
++
++    def stop_additives(self):
++        if self.additives_added == len(list(ADDITIVES)):
++            self.add_additives_btn.Disable()
++        elif len(self.available_additives) == 0:
++            self.add_additives_btn.Disable()
++        else:
++            self.add_additives_btn.Enable()
++
++    def selected_additive(self):
++        s_addit = []
++        for n in self.additives_container.GetChildren():
++            value = n.GetWindow().addit_combo.GetValue()
++            s_addit.append(value)
++        return s_addit
++
++
++# todo scroll upon adding.
++# todo fix remove
+ class CoffeesOuter(scrolled.ScrolledPanel):
+     def __init__(self, parent):
+-        super().__init__(parent, size=(400,200), style = wx.TAB_TRAVERSAL|wx.SUNKEN_BORDER)
++        """Constructor"""
++        super().__init__(parent, size=(400, 200), style=wx.SUNKEN_BORDER)
++
++        # This is the panel that holds all the coffees that are added.
+         self.parent = parent
+         self.no_coffees = 0
+         self.outer_sizer = wx.BoxSizer(wx.VERTICAL)
+-        # self.SetSize(wx.Size(500, 200))
+ 
+-        # self.coffee_panel = Coffees(self)
+-        # self.add_btn = wx.Button(self, label='Add')
+-        # self.add_btn.Bind(wx.EVT_BUTTON, self.add)
+-
+-        # self.outer_sizer.Add(self.coffee_panel, 0, wx.EXPAND | wx.ALL, 5)
++        self.intro_txt = wx.StaticText(self, label="As coffees are added they will be found here.",
++                                       style=wx.ALIGN_CENTRE)
++        self.outer_sizer.Add(self.intro_txt, 1, wx.EXPAND, 5)
+ 
+         self.SetSizer(self.outer_sizer)
+         self.SetupScrolling()
+-        # self.SetBackgroundColour('blue')
+ 
+     def add(self, event):
++        if self.intro_txt:
++            self.intro_txt.Destroy()
+         if self.no_coffees < 5:
+             self.no_coffees = self.no_coffees + 1
+             coffees_panel = Coffees(self, self.no_coffees)
+-            self.outer_sizer.Add(coffees_panel, 0, wx.ALIGN_LEFT, 10)
+-            # print(self.GetScaleX())
+-            # print(coffees_panel.GetSize()[0]*self.no_coffees)
++            self.outer_sizer.Add(coffees_panel, 0, wx.ALIGN_CENTRE, 10)
+ 
+-            self.Scroll((0, coffees_panel.GetSize()[0]*self.no_coffees))
+-            self.fit()
++            self.Scroll((0, 9000))
++            print(self.GetScaleY)
++            self.ShouldScrollToChildOnFocus(coffees_panel)
+ 
+             self.parent.parent.summary_refresh(0)
++            # fit(self)
+ 
+             if self.no_coffees == 5:
+                 event.GetEventObject().Disable()
+ 
++    # reset the coffees panel
++    def reset(self, event):
++        for n in self.outer_sizer.GetChildren():
++            n.GetWindow().Destroy()
++            self.no_coffees = 0
++        self.parent.parent.summary_refresh(0)
++        self.add_default()
++        fit(self)
++
++    def add_default(self):
++        self.intro_txt = wx.StaticText(self, label="As coffees are added they will be found here.",
++                                       style=wx.ALIGN_CENTRE)
++        self.outer_sizer.Add(self.intro_txt, 1, wx.EXPAND, 5)
++
++    def refresh_no(self):
++        i = 1
++        for n in self.outer_sizer.GetChildren():
++            n.GetWindow().s_box.SetLabel('Coffee No {}'.format(i))
++            i += 1
++
++
++class AddressPanel(wx.Panel):
++    def __init__(self, parent):
++        super().__init__(parent)
++        """Constructor"""
++        self.parent = parent
++
++        s_box = wx.StaticBox(self, 0, 'Add customer details')
++        s_box_sizer = wx.StaticBoxSizer(s_box, wx.VERTICAL)
++
++        outer_sizer = wx.BoxSizer(wx.VERTICAL)
++
++        name_sizer = wx.BoxSizer(wx.HORIZONTAL)
++        self.name_stc_txt = wx.StaticText(self, label='Name: ')
++        self.name_txt_ctrl = wx.TextCtrl(self)
++        name_sizer.Add(self.name_stc_txt, 0, wx.ALL, 5)
++        name_sizer.Add(self.name_txt_ctrl, 0, wx.ALL, 5)
++
++        address_sizer = wx.BoxSizer(wx.HORIZONTAL)
++        self.address_stc_txt = wx.StaticText(self, label='Address: ')
++        self.address_txt_ctrl = wx.TextCtrl(self, style=wx.HSCROLL)
++        address_sizer.Add(self.address_stc_txt, 1, wx.ALL, 5)
++        address_sizer.Add(self.address_txt_ctrl, 5, wx.ALL | wx.EXPAND, 5)
++
++        set_btn = wx.Button(self, label='Set')
++        set_btn.Bind(wx.EVT_BUTTON, self.change_details)
++
++        outer_sizer.Add(name_sizer, 0, wx.ALL, 0)
++        outer_sizer.Add(address_sizer, 0, wx.ALL, 0)
++        outer_sizer.Add(set_btn, 0, wx.ALL, 0)
++
++        s_box_sizer.Add(outer_sizer, 0, wx.EXPAND, 5)
++        self.SetSizer(s_box_sizer)
++
++        self.address_stc_txt.Disable()
++        self.address_txt_ctrl.Disable()
++
++    # validating name and address
++    def change_details(self, event):
++        name = self.name_txt_ctrl
++        address = self.address_txt_ctrl
++
++        if name.GetValue() == '':
++            wx.MessageBox('Please insert Name', 'Error', wx.OK | wx.ICON_ERROR)
++            name.SetFocus()
++            return
++        if address.IsEnabled():
++            if address.GetValue() == '':
++                wx.MessageBox('Please insert Address', 'Error', wx.OK | wx.ICON_ERROR)
++                address.SetFocus()
++                return
++
++        if re.search(r'[^a-zA-Z-\s]', name.GetValue()):
++            wx.MessageBox('Please insert proper name. No special characters', 'Error', wx.OK | wx.ICON_ERROR)
++            name.SetFocus()
++            return
++
++        if re.search(r'[^0-9a-zA-Z-\s]', address.GetValue()):
++            wx.MessageBox('Please insert proper address. No special characters', 'Error', wx.OK | wx.ICON_ERROR)
++            address.SetFocus()
++            return
++
++        self.parent.parent.summary_panel.order_name = name.GetValue()
++        self.parent.parent.summary_panel.order_address = address.GetValue()
++        self.parent.parent.summary_refresh(0)
++        self.parent.finish_btn.Enable()
++
++    def enable(self, serve):
++        self.Enable()
++        if serve == 1:
++            self.address_stc_txt.Enable()
++            self.address_txt_ctrl.Enable()
+         else:
+-            pass
+-
+-    def fit(self):
+-        self.parent.SetSize((1, 1))
+-        self.parent.fit()
++            self.address_stc_txt.Disable()
++            self.address_txt_ctrl.Disable()
++            self.address_txt_ctrl.SetValue('')
++            self.parent.parent.summary_panel.choice_address = ''
++        self.name_stc_txt.Enable()
++        self.name_txt_ctrl.Enable()
++        # self.change_details(0)
+ 
+ 
+ class Choices(wx.Panel):
+     def __init__(self, parent):
++        """Constructor"""
++
+         super().__init__(parent)
+         self.parent = parent
+         self.no_coffees = 0
++
+         self.choices_sizer = wx.BoxSizer(wx.VERTICAL)
+         pick_panel = PickOrDelivery(self)
+         self.coffees_outer_panel = CoffeesOuter(self)
+ 
++        self.btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+         self.btn = wx.Button(self, label='Add')
+         self.btn.Bind(wx.EVT_BUTTON, self.coffees_outer_panel.add)
++        self.btn_sizer.Add(self.btn, 1, wx.ALL | wx.ALIGN_LEFT, 5)
++
++        self.reset_btn = wx.Button(self, label='Reset')
++        self.reset_btn.Bind(wx.EVT_BUTTON, self.coffees_outer_panel.reset)
++        self.btn_sizer.Add(self.reset_btn, 1, wx.ALL, 5)
++
++        self.btn_sizer.AddStretchSpacer(2)
++
++        self.address_panel = AddressPanel(self)
++
++        self.btn_sizer_defaults = wx.BoxSizer(wx.HORIZONTAL)
+ 
++        self.finish_btn = wx.Button(self, label='Finish')
++        self.finish_btn.Bind(wx.EVT_BUTTON, self.finish)
++        self.btn_sizer_defaults.Add(self.finish_btn, 1, wx.LEFT, 5)
++
++        self.cancel_btn = wx.Button(self, label='Cancel')
++        self.cancel_btn.Bind(wx.EVT_BUTTON, self.cancel_box)
++        self.btn_sizer_defaults.Add(self.cancel_btn, 1, wx.LEFT, 5)
++
++        # Adding components into choices_sizer
+         self.choices_sizer.Add(pick_panel, 0, wx.ALIGN_LEFT, 5)
+-        self.choices_sizer.Add(self.coffees_outer_panel, 0, wx.ALIGN_LEFT, 5)
+-        self.choices_sizer.Add(self.btn, 0, wx.ALIGN_LEFT, 5)
++        self.choices_sizer.Add(self.coffees_outer_panel, 0, wx.EXPAND | wx.ALL, 5)
++        self.choices_sizer.Add(self.btn_sizer, 1, wx.ALIGN_LEFT, 5)
++        self.choices_sizer.Add(self.address_panel, 0, wx.ALL | wx.EXPAND, 5)
++        self.choices_sizer.Add(self.btn_sizer_defaults, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
+ 
+-        self.SetSizerAndFit(self.choices_sizer)
+-        self.coffees_outer_panel.SetSize((1,1))
++        self.SetSizer(self.choices_sizer)
+ 
+-        # self.add(0)
++        # Disable all buttons as default
++        self.btn.Disable()
++        self.finish_btn.Disable()
++        self.address_panel.Disable()
+ 
+-    def fit(self):
+-        self.Fit()
+-        self.parent.Fit()
+-        self.parent.parent.Fit()
+-
++    # Add a coffee according to condition
+     def add(self, event):
+         if self.no_coffees < 5:
+             self.no_coffees = self.no_coffees + 1
+             coffees_panel = Coffees(self, self.no_coffees)
+             self.choices_sizer.Add(coffees_panel, 0, wx.ALIGN_CENTRE, 10)
+             print(self.no_coffees)
+-        else:
+-            pass
++
++    # Enable parts of this panel
++    def enable(self, serve):
++        self.coffees_outer_panel.Enable()
++        self.btn.Enable()
++        self.address_panel.enable(serve)
++
++    def finish(self, event):
++        if wx.MessageBox('Are you done?', 'Finish', wx.YES_NO | wx.ICON_QUESTION) == wx.NO:
++            return
++
++        if wx.MessageBox('Do you want a PDF receipt?', 'Receipt', wx.YES_NO | wx.ICON_QUESTION) == wx.NO:
++            self.parent.parent.Destroy()
++            main()
++            return
++
++        to_print = []
++        for n in self.parent.summary_panel.summary_sizer.GetChildren():
++            if type(n.GetWindow()) == wx.StaticText:
++                to_print.append(n.GetWindow().GetLabel())
++
++        print_pdf(to_print)  # sends to the printing department
++
++        self.parent.parent.Destroy()
++        main()  # start a new window
++
++    def cancel_box(self, event):
++        if wx.MessageBox('Are you sure to close this application without saving?', 'Warning',
++                         wx.YES_NO | wx.ICON_WARNING) == wx.YES:
++            self.parent.parent.Destroy()
+ 
+ 
+ class Summary(wx.Panel):
+     def __init__(self, parent):
++        """Constructor"""
+         super().__init__(parent)
+         self.parent = parent
+         s_box = wx.StaticBox(self, 0, 'Summary')
+         s_box_sizer = wx.StaticBoxSizer(s_box, wx.VERTICAL)
+         self.summary_sizer = wx.BoxSizer(wx.VERTICAL)
+ 
+-        txt = wx.StaticText(self, label="Items:")
+-        self.summary_sizer.Add(txt, 0, wx.ALIGN_LEFT, 5)
++        self.add_default()
+ 
+         s_box_sizer.Add(self.summary_sizer, 0, wx.EXPAND, 5)
+         self.SetSizer(s_box_sizer)
+ 
+-    def remove(self):
++        self.serving = int(0)
++        self.order_name: str = ''
++        self.order_address: str = ''
++
++    def remove(self):  # To destroy everything in the sizer
+         for n in self.summary_sizer.GetChildren():
+             n.GetWindow().Destroy()
+ 
+-    def add(self, no=1, item=None, amount=0, cost=0):
+-        self.remove()
+-        for n in item:
+-            if n != '':
+-                txt = wx.StaticText(self, label=n)
+-                self.summary_sizer.Add(txt, 0, wx.ALIGN_CENTRE, 5)
+-        self.SetSize(0,0)
+-        self.Fit()
+-        self.parent.SetSize(0,0)
+-        self.parent.Fit()
++    def add_default(self):
++        intro_txt = wx.StaticText(self, label="As coffees are selected their overview would be found here",
++                                  style=wx.ALIGN_CENTRE)
++        intro_txt.Wrap(170)
++        self.summary_sizer.Add(intro_txt, 0, wx.ALIGN_CENTRE, 5)
++
++    # This is the main function to add (and calculate) all the user inputs into the final preview.
++    def add(self, drink_dict=None):
++
++        self.remove()  # clear the entire panel
++
++        if len(drink_dict) == 0:  # prevent showing 0 drinks
++            self.add_default()
++            fit(self)
++            return
++
++        # set the delivery cost
++        if self.serving == 1:
++            delivery_cost = 3
++        else:
++            delivery_cost = 0
++
++        # to prevent unfinished title
++        if self.order_name == '':
++            name = 'Order'
++        else:
++            name = self.order_name.title() + "'s Order"
++
++        serving_text = wx.StaticText(self, label=name)
++        serving_text.SetFont(wx.Font(-1, wx.DEFAULT, wx.NORMAL, wx.BOLD))
++        self.summary_sizer.Add(serving_text, 0, wx.ALIGN_CENTRE, 5)
++
++        # checking for duplicated, and grouping them in a dictionary
++        reverse_drink_dict = {}
++        for key, value in drink_dict.items():
++            reverse_drink_dict.setdefault(repr(value), set()).add(key)
++
++        # making the final list of drinks for printing into the summary panel
++        # with Schema : [ [ 'drink', 'size', { 'additive': amount,... }, amount ],... ]
++        non_repeats_list = [key for key, values in reverse_drink_dict.items() if len(values) == 1]
++        repeat_dict = {key: len(values) for key, values in reverse_drink_dict.items() if len(values) > 1}
++
++        all_list = [ast.literal_eval(r) + [n] for r, n in repeat_dict.items()] + \
++                   [ast.literal_eval(r) + [1] for r in non_repeats_list]
++
++        total_coffee: int = 0
++        total_price: int = 0
++
++        # inserting as Static Texts into Summary Sizer
++        for item in all_list:
++            name = item[0]
++            size = item[1]
++            additives = item[2]
++            times = item[3]
++            price = PRICES['coffees'][name.lower()] * times
++
++            if times > 1:
++                name_txt = wx.StaticText(self, label="{} {} x{} : ${}".format(size, name, times, price))
++            else:
++                name_txt = wx.StaticText(self, label="{} {} : ${}".format(size, name, price))
++
++            self.summary_sizer.Add(name_txt, 0, wx.ALIGN_RIGHT | wx.UP, 5)
++
++            for ad, am in additives.items():
++                if am > 0:
++                    additives_txt = wx.StaticText(self, label="{} x{}".format(ad, am))
++                else:
++                    additives_txt = wx.StaticText(self, label="{}".format(ad))
++                self.summary_sizer.Add(additives_txt, 0, wx.ALIGN_RIGHT, 5)
++
++            total_coffee += times
++            total_price += price
++
++        horz_line = wx.StaticLine(self, style=wx.LI_HORIZONTAL)
++        self.summary_sizer.Add(horz_line, 0, wx.EXPAND, 5)
++
++        total_txt = wx.StaticText(self, label="Drinks ({}) : ${}".format(total_coffee, total_price))
++        self.summary_sizer.Add(total_txt, 0, wx.ALIGN_LEFT | wx.UP, 10)
++
++        gst_price = round(total_price * 1.15, 3)
++        gst_txt = wx.StaticText(self, label="With GST (15%) : ${}".format(gst_price))
++        self.summary_sizer.Add(gst_txt, 0, wx.ALIGN_LEFT, 15)
++
++        delivery_txt = wx.StaticText(self, label="Delivery Charge : ${}".format(delivery_cost))
++        self.summary_sizer.Add(delivery_txt, 0, wx.ALIGN_LEFT, 15)
++
++        horz_line = wx.StaticLine(self, style=wx.LI_HORIZONTAL)
++        self.summary_sizer.Add(horz_line, 0, wx.EXPAND, 5)
++
++        grand_total_txt = wx.StaticText(self, label="Grand Total : ${}".format(delivery_cost + gst_price))
++        grand_total_txt.SetFont(wx.Font(-1, wx.DEFAULT, wx.NORMAL, wx.BOLD))
++        self.summary_sizer.Add(grand_total_txt, 0, wx.ALIGN_RIGHT | wx.UP, 10)
++
++        # to prevent blank address
++        if self.order_address != '':
++            address_txt = wx.StaticText(self, label="Address: {}".format(self.order_address))
++            address_txt.Wrap(170)
++            self.summary_sizer.Add(address_txt, 0, wx.ALIGN_LEFT | wx.UP, 15)
++
++        fit(self)
+ 
+ 
+ class MainPanel(wx.Panel):
+     def __init__(self, parent):
++        """
++        Constructor
++        This method for constructing a main panel which holds all other panels.
++        """
+         super().__init__(parent)
+         self.parent = parent
+-        outer_sizer = wx.BoxSizer(wx.VERTICAL)
+         main_sizer = wx.BoxSizer(wx.HORIZONTAL)
+ 
+         self.summary_panel = Summary(self)
+@@ -296,41 +672,63 @@
+         main_sizer.Add(self.choices_panel, 5, wx.EXPAND | wx.ALL, 5)
+         main_sizer.Add(self.summary_panel, 2, wx.EXPAND | wx.ALL, 5)
+ 
+-        outer_sizer.Add(main_sizer, 1, wx.EXPAND, 5)
+-        # btn = wx.Button(self, label='try')
+-        # outer_sizer.Add(btn, 1, wx.EXPAND, 5)
+-        # btn.Bind(wx.EVT_BUTTON, self.summary_refresh)
+-        self.SetSizer(outer_sizer)
++        self.SetSizer(main_sizer)
+ 
+-        self.Fit()
++        fit(self)
+ 
++    # create a dictionary of all selected drinks and call method in summary panel
+     def summary_refresh(self, event):
+-        summary_coffees = []
++
++        selected_drinks = {}  # Schema: { No: [ 'drink', 'size', { 'additive': amount,... } ],... }
++
++        # Add to  selected_drinks according to schema
++        i = 1
+         for n in self.choices_panel.coffees_outer_panel.outer_sizer.GetChildren():
+-            summary_coffees.append(n.GetWindow().coffee_combo.GetValue())
+-            # self.summary_panel.add(item=n.GetWindow().coffee_combo.GetValue())
+-        print(summary_coffees)
+-        self.summary_panel.add(item=summary_coffees)
++            print(type(n.GetWindow()), wx.StaticText)
++            if type(n.GetWindow()) != wx.StaticText:
++                drink = n.GetWindow().coffee_combo.GetValue()
++                size = n.GetWindow().size_combo.GetValue()
++
++                if drink.lower() in PRICES['coffees'] and size in SIZE:  # to prevent default messages
++
++                    prop_list = []
++                    selected_drinks[i] = []
++                    prop_list.append(drink)
++                    prop_list.append(size)
++
++                    selected_additives = {}
+ 
++                    for p in n.GetWindow().additives_container.GetChildren():
++                        if p.GetWindow().num_ctrl.IsEnabled() and p.GetWindow().num_ctrl.GetValue() == 0:
++                            pass
++                        else:
++                            selected_additives[p.GetWindow().addit_combo.GetValue()] = p.GetWindow().num_ctrl.GetValue()
+ 
++                    prop_list.append(selected_additives)
++                    selected_drinks[i] = prop_list
++                    i += 1
++
++        self.summary_panel.add(drink_dict=selected_drinks)
+ 
+ 
+ class MainFrame(wx.Frame):
+     def __init__(self):
+-        super().__init__(parent=None, title="Coffee Order")
++        """
++        This is the Main wx.Frame Window into which all the other wx.Panels are added.
++        This method is called to create the generic layout for the application
++        """
++        super().__init__(parent=None, title="Coffee Order", size=DEFAULT_SIZE,
++                         style=wx.SYSTEM_MENU | wx.CAPTION | wx.MINIMIZE_BOX | wx.CLOSE_BOX)
+         main_panel = MainPanel(self)
+-        # main_sizer = wx.BoxSizer(wx.VERTICAL)
+-        #
+-        # pick_delivery = PickOrDelivery(main_panel)
+-        # main_sizer.Add(pick_delivery, 0, wx.EXPAND, 5)
+-        #
+-        # main_panel.SetSizer(main_sizer)
+         self.Show()
+-        self.Fit()
++        # fit(self)
+ 
+ 
+-if __name__ == '__main__':
++def main():
+     app = wx.App()
+     frame = MainFrame()
+     app.MainLoop()
+ 
++
++if __name__ == '__main__':
++    main()
